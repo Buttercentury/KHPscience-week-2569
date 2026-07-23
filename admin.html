@@ -42,6 +42,42 @@ td{padding:10px 11px;border-bottom:1px solid rgba(201,182,255,.13);color:#e4ddf7
 tr.tm td{background:rgba(168,216,255,.09);font-weight:600;color:var(--sky);font-size:13px}
 .empty{text-align:center;color:#8d81b8;padding:60px 20px;font-size:15px;line-height:2}
 
+/* ---- row actions ---- */
+.act-cell{white-space:nowrap}
+.mini{font-size:11.5px;padding:5px 9px;border-radius:8px;margin:0 3px 0 0;
+  border:1px solid var(--line);background:rgba(201,182,255,.1);color:var(--lav);cursor:pointer}
+.mini:hover{background:rgba(201,182,255,.24);border-color:var(--lav)}
+.mini.danger{border-color:rgba(255,120,120,.4);background:rgba(255,120,120,.1);color:#ffa8a8}
+.mini.danger:hover{background:rgba(255,120,120,.26)}
+.tact{float:right}
+@media print{.act-cell,.tact{display:none!important}}
+
+/* ---- modal ---- */
+.mask{position:fixed;inset:0;z-index:80;background:rgba(10,6,28,.82);
+  backdrop-filter:blur(7px);display:none;place-items:center;padding:20px}
+.mask.show{display:grid}
+.modal{background:linear-gradient(168deg,#2c1f63,#1e1547);border:1px solid var(--line);
+  border-radius:20px;padding:26px 24px;max-width:480px;width:100%;max-height:88vh;overflow:auto;
+  box-shadow:0 24px 70px rgba(0,0,0,.6)}
+.modal h3{font-family:'Chakra Petch',sans-serif;font-size:19px;color:var(--sun);margin-bottom:8px}
+.mline{font-size:13.5px;color:#b3a7d8;margin-bottom:16px;line-height:1.7}
+.modal label.fl{display:block;font-size:12.5px;font-weight:600;color:var(--lav);margin:12px 0 6px}
+.modal input,.modal select{width:100%;padding:11px 13px;border-radius:11px;font-size:14.5px;
+  font-family:inherit;background:rgba(20,13,48,.62);color:#fff;border:1.5px solid var(--line)}
+.modal input:focus,.modal select:focus{outline:none;border-color:var(--sky);
+  box-shadow:0 0 0 3px rgba(168,216,255,.2)}
+.mgrid{display:grid;grid-template-columns:1fr 92px;gap:11px}
+.mnote{font-size:12.5px;color:var(--sun);background:rgba(255,229,158,.09);
+  padding:10px 12px;border-radius:10px;border-left:3px solid var(--sun);margin-top:14px;line-height:1.7}
+.merr{font-size:13px;color:#ffb3b3;background:rgba(255,110,110,.13);
+  border:1px solid rgba(255,110,110,.4);padding:10px 12px;border-radius:10px;margin-top:14px;line-height:1.6}
+.mrow{display:flex;gap:10px;margin-top:20px}
+.mbtn{flex:1;padding:13px;border:none;border-radius:12px;cursor:pointer;font-family:'Chakra Petch',sans-serif;
+  font-weight:700;font-size:15px;color:#1b1240;background:linear-gradient(97deg,var(--sun),var(--rose))}
+.mbtn:hover{filter:brightness(1.07)}
+.mbtn.ghost{background:transparent;border:1.5px solid var(--line);color:var(--lav)}
+.mbtn.danger{background:linear-gradient(97deg,#ff9d9d,#ff7a7a)}
+
 /* ============ LOCK ============ */
 #app{display:none}
 #lock{position:relative;z-index:2;min-height:100vh;display:grid;place-items:center;padding:24px}
@@ -68,7 +104,7 @@ tr.tm td{background:rgba(168,216,255,.09);font-weight:600;color:var(--sky);font-
 @media print{
   @page{size:A4 portrait;margin:13mm 12mm}
   body{background:#fff!important;color:#000!important;font-family:'Sarabun',sans-serif}
-  body::before,.wrap,#lock{display:none!important}
+  body::before,.wrap,#lock,.mask{display:none!important}
   #print{display:block!important}
   .sheet{page-break-after:always}
   .sheet:last-child{page-break-after:auto}
@@ -131,6 +167,8 @@ tr.tm td{background:rgba(168,216,255,.09);font-weight:600;color:var(--sky);font-
 
 <div id="print"></div>
 
+<div class="mask" id="mask"><div class="modal" id="modal"></div></div>
+
 <script>
 /* ---- password gate (deters casual access; not real security) ---- */
 const PASS = "KHPsci1234";
@@ -164,7 +202,7 @@ try{ if(sessionStorage.getItem(KEY)==='1') openApp(); }catch(e){}
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, getDocs }
+import { getFirestore, collection, getDocs, doc, updateDoc, deleteDoc, addDoc, query, where, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -228,7 +266,12 @@ function screenView(groups){
   el.innerHTML=groups.map(g=>{
     let body='';
     for(const t of g.teams){
-      body+=`<tr class="tm"><td colspan="5">${t.name} (${t.members.length} คน)</td></tr>`;
+      const f=t.members[0];
+      body+=`<tr class="tm"><td colspan="6">${t.name} (${t.members.length} คน)
+        <span class="tact">
+          <button class="mini" data-addm="${f.actId}|${f.teamId}|${f.level}">+ เพิ่มสมาชิก</button>
+          <button class="mini danger" data-delteam="${f.actId}|${f.teamId}|${f.level}">ลบทั้งทีม</button>
+        </span></td></tr>`;
       t.members.forEach((m,i)=>{ body+=row(m,i+1); });
     }
     g.solo.forEach((m,i)=>{ body+=row(m,i+1); });
@@ -236,12 +279,18 @@ function screenView(groups){
       <div class="lvl">${g.lvl} · ${g.count} คน${g.teams.length?` · ${g.teams.length} ทีม`:''}</div>
       <table><thead><tr><th style="width:44px">ที่</th><th>ชื่อ – สกุล</th>
         <th style="width:80px">ชั้น</th><th style="width:60px">เลขที่</th><th>หมายเหตุ</th>
+        <th style="width:96px">จัดการ</th>
       </tr></thead><tbody>${body}</tbody></table></div>`;
   }).join('');
+  bindActions();
 }
 const extraOf=r=>[r.category,r.costume?`“${r.costume}”`:''].filter(Boolean).join(' ');
 const row=(m,i)=>`<tr><td>${i}</td><td>${m.name}</td><td>${m.class}</td>
-  <td>${m.no??''}</td><td>${extraOf(m)||'—'}</td></tr>`;
+  <td>${m.no??''}</td><td>${extraOf(m)||'—'}</td>
+  <td class="act-cell">
+    <button class="mini" data-edit="${m._id}">แก้ไข</button>
+    <button class="mini danger" data-del="${m._id}">ลบ</button>
+  </td></tr>`;
 
 function printView(groups){
   const now=new Date();
@@ -286,11 +335,173 @@ function paint(){
   screenView(g); printView(g);
 }
 
+/* ============ edit / delete ============ */
+const ROOMS={1:6,2:7,3:7,4:5,5:5,6:5};
+const CLASSES=[];
+for(const gr of [1,2,3,4,5,6]) for(let r=1;r<=ROOMS[gr];r++) CLASSES.push(`ม.${gr}/${r}`);
+const gradeOf = c => +c.split('.')[1].split('/')[0];
+const levelOf = c => gradeOf(c)<=3 ? 'ม.ต้น' : 'ม.ปลาย';
+/* which activities require every member in the same grade number */
+const SAME_GRADE={dance:true};
+
+const mask=document.getElementById('mask'), modal=document.getElementById('modal');
+const closeModal=()=>mask.classList.remove('show');
+mask.onclick=e=>{ if(e.target===mask) closeModal(); };
+const show=h=>{ modal.innerHTML=h; mask.classList.add('show'); };
+const classOpts=(sel)=>CLASSES.map(c=>`<option value="${c}"${c===sel?' selected':''}>${c}</option>`).join('');
+
+function bindActions(){
+  document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>openEdit(b.dataset.edit));
+  document.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>openDelete(b.dataset.del));
+  document.querySelectorAll('[data-addm]').forEach(b=>b.onclick=()=>openAddMember(b.dataset.addm));
+  document.querySelectorAll('[data-delteam]').forEach(b=>b.onclick=()=>openDeleteTeam(b.dataset.delteam));
+}
+
+function openEdit(id){
+  const r=rows.find(x=>x._id===id); if(!r) return;
+  show(`<h3>แก้ไขข้อมูลผู้สมัคร</h3>
+    <p class="mline">${r.actName}${r.teamId?` · ทีม ${r.teamId}`:''}</p>
+    <label class="fl">ชื่อ – สกุล</label>
+    <input type="text" id="e_name" value="${(r.name||'').replace(/"/g,'&quot;')}">
+    <div class="mgrid">
+      <div><label class="fl">ชั้น</label><select id="e_class">${classOpts(r.class)}</select></div>
+      <div><label class="fl">เลขที่</label><input type="number" id="e_no" min="1" max="60" value="${r.no??''}"></div>
+    </div>
+    ${r.costume!==undefined && (r.category||r.costume) ? `
+      <label class="fl">ประเภท</label>
+      <select id="e_cat">
+        <option value="สวยงาม"${r.category==='สวยงาม'?' selected':''}>สวยงาม</option>
+        <option value="สร้างสรรค์"${r.category==='สร้างสรรค์'?' selected':''}>สร้างสรรค์</option>
+      </select>
+      <label class="fl">ชื่อชุด</label>
+      <input type="text" id="e_cos" value="${(r.costume||'').replace(/"/g,'&quot;')}">`:''}
+    ${r.team!==undefined && r.teamId ? `
+      <label class="fl">ชื่อทีม${r.team?'':' (ไม่มี)'}</label>
+      <input type="text" id="e_team" value="${(r.team||'').replace(/"/g,'&quot;')}"
+        ${r.team?'':'placeholder="รายการนี้ใช้เลขทีมแทนชื่อ"'}>`:''}
+    <div id="e_err"></div>
+    <div class="mrow"><button class="mbtn ghost" id="e_no_">ยกเลิก</button>
+      <button class="mbtn" id="e_ok">บันทึก</button></div>`);
+  document.getElementById('e_no_').onclick=closeModal;
+  document.getElementById('e_ok').onclick=async()=>{
+    const nm=document.getElementById('e_name').value.trim();
+    const cl=document.getElementById('e_class').value;
+    const nn=document.getElementById('e_no').value.trim();
+    const eE=document.getElementById('e_err');
+    if(!nm||!cl||!nn){ eE.innerHTML='<div class="merr">กรอกชื่อ ชั้น และเลขที่ให้ครบ</div>'; return; }
+
+    /* team rule check against the rest of the team */
+    if(r.teamId){
+      const mates=rows.filter(x=>x.actId===r.actId&&x.teamId===r.teamId&&x.level===r.level&&x._id!==id);
+      const same=SAME_GRADE[r.actId];
+      const bad=mates.find(m=> same ? gradeOf(m.class)!==gradeOf(cl) : levelOf(m.class)!==levelOf(cl));
+      if(bad){ eE.innerHTML=`<div class="merr">ชั้นใหม่ขัดกับกติกาของทีม —
+        ${bad.name} อยู่ ${bad.class}${same?' (ต้องอยู่ชั้นเดียวกัน)':' (ต้องอยู่ช่วงชั้นเดียวกัน)'}</div>`; return; }
+    }
+    const patch={name:nm, class:cl, no:Number(nn)};
+    if(!r.teamId) patch.level = (r.level==='รวม') ? 'รวม' : levelOf(cl);
+    const cat=document.getElementById('e_cat'), cos=document.getElementById('e_cos'),
+          tm=document.getElementById('e_team');
+    if(cat) patch.category=cat.value;
+    if(cos) patch.costume=cos.value.trim();
+    if(tm)  patch.team=tm.value.trim();
+    try{
+      await updateDoc(doc(db,'registrations',id),patch);
+      /* keep the whole team's name in sync */
+      if(tm){
+        const mates=rows.filter(x=>x.actId===r.actId&&x.teamId===r.teamId&&x.level===r.level&&x._id!==id);
+        for(const m of mates) await updateDoc(doc(db,'registrations',m._id),{team:tm.value.trim()});
+      }
+      closeModal(); load();
+    }catch(e){ eE.innerHTML=`<div class="merr">บันทึกไม่สำเร็จ: ${e.message}</div>`; }
+  };
+}
+
+function openDelete(id){
+  const r=rows.find(x=>x._id===id); if(!r) return;
+  const mates=r.teamId? rows.filter(x=>x.actId===r.actId&&x.teamId===r.teamId&&x.level===r.level):[];
+  const left=mates.length-1;
+  show(`<h3>ลบผู้สมัคร</h3>
+    <p class="mline">ลบ <b>${r.name}</b> (${r.class}) ออกจาก<br>${r.actName}${r.teamId?` · ทีม ${r.teamId}`:''}</p>
+    ${r.teamId?`<div class="mnote">ทีมนี้จะเหลือ ${left} คน${left<2?' — น้อยกว่าเกณฑ์ ควรลบทั้งทีมหรือเพิ่มสมาชิกแทน':''}</div>`:''}
+    <div id="d_err"></div>
+    <div class="mrow"><button class="mbtn ghost" id="d_no">ยกเลิก</button>
+      <button class="mbtn danger" id="d_ok">ลบรายการนี้</button></div>`);
+  document.getElementById('d_no').onclick=closeModal;
+  document.getElementById('d_ok').onclick=async()=>{
+    try{ await deleteDoc(doc(db,'registrations',id)); closeModal(); load(); }
+    catch(e){ document.getElementById('d_err').innerHTML=`<div class="merr">ลบไม่สำเร็จ: ${e.message}</div>`; }
+  };
+}
+
+function openDeleteTeam(key){
+  const [actId,teamId,level]=key.split('|');
+  const ms=rows.filter(x=>x.actId===actId&&x.teamId===teamId&&x.level===level);
+  if(!ms.length) return;
+  show(`<h3>ลบทั้งทีม</h3>
+    <p class="mline">${ms[0].actName} · ทีม ${teamId}${ms[0].team?` — ${ms[0].team}`:''} (${level})</p>
+    <div class="mnote">จะลบสมาชิกทั้ง ${ms.length} คน:<br>${ms.map(m=>`${m.name} (${m.class})`).join('<br>')}</div>
+    <div id="dt_err"></div>
+    <div class="mrow"><button class="mbtn ghost" id="dt_no">ยกเลิก</button>
+      <button class="mbtn danger" id="dt_ok">ลบทั้งทีม</button></div>`);
+  document.getElementById('dt_no').onclick=closeModal;
+  document.getElementById('dt_ok').onclick=async()=>{
+    try{ for(const m of ms) await deleteDoc(doc(db,'registrations',m._id));
+      closeModal(); load(); }
+    catch(e){ document.getElementById('dt_err').innerHTML=`<div class="merr">ลบไม่สำเร็จ: ${e.message}</div>`; }
+  };
+}
+
+function openAddMember(key){
+  const [actId,teamId,level]=key.split('|');
+  const ms=rows.filter(x=>x.actId===actId&&x.teamId===teamId&&x.level===level);
+  if(!ms.length) return;
+  const f=ms[0], same=SAME_GRADE[actId];
+  show(`<h3>เพิ่มสมาชิกเข้าทีม</h3>
+    <p class="mline">${f.actName} · ทีม ${teamId}${f.team?` — ${f.team}`:''} (ตอนนี้ ${ms.length} คน)</p>
+    <label class="fl">ชื่อ – สกุล</label>
+    <input type="text" id="a_name" placeholder="ชื่อ – สกุล">
+    <div class="mgrid">
+      <div><label class="fl">ชั้น</label><select id="a_class"><option value="">เลือกชั้น</option>${classOpts('')}</select></div>
+      <div><label class="fl">เลขที่</label><input type="number" id="a_no" min="1" max="60" placeholder="เลขที่"></div>
+    </div>
+    <div class="mnote">${same
+      ? `สมาชิกใหม่ต้องอยู่ชั้นเดียวกับทีม (${f.class.split('/')[0]})`
+      : `สมาชิกใหม่ต้องอยู่ช่วงชั้นเดียวกับทีม (${level})`}</div>
+    <div id="a_err"></div>
+    <div class="mrow"><button class="mbtn ghost" id="a_no_">ยกเลิก</button>
+      <button class="mbtn" id="a_ok">เพิ่มสมาชิก</button></div>`);
+  document.getElementById('a_no_').onclick=closeModal;
+  document.getElementById('a_ok').onclick=async()=>{
+    const nm=document.getElementById('a_name').value.trim();
+    const cl=document.getElementById('a_class').value;
+    const nn=document.getElementById('a_no').value.trim();
+    const eE=document.getElementById('a_err');
+    if(!nm||!cl||!nn){ eE.innerHTML='<div class="merr">กรอกชื่อ ชั้น และเลขที่ให้ครบ</div>'; return; }
+    const bad = same ? gradeOf(cl)!==gradeOf(f.class) : levelOf(cl)!==level;
+    if(bad){ eE.innerHTML=`<div class="merr">${same
+      ? `ทีมนี้เป็น ${f.class.split('/')[0]} ทั้งทีม — ${cl} เข้าร่วมไม่ได้`
+      : `ทีมนี้เป็น ${level} — ${cl} เข้าร่วมไม่ได้`}</div>`; return; }
+    if(ms.some(m=>m.name===nm&&m.class===cl)){
+      eE.innerHTML='<div class="merr">มีชื่อนี้อยู่ในทีมแล้ว</div>'; return; }
+    try{
+      await addDoc(collection(db,'registrations'),{
+        name:nm, class:cl, no:Number(nn), level:f.level,
+        actId:f.actId, actName:f.actName,
+        teamNo:f.teamNo??null, teamId:f.teamId, team:f.team||'',
+        costume:'', category:'', addedByTeacher:true,
+        createdAt: serverTimestamp()
+      });
+      closeModal(); load();
+    }catch(e){ eE.innerHTML=`<div class="merr">เพิ่มไม่สำเร็จ: ${e.message}</div>`; }
+  };
+}
+
 async function load(){
   document.getElementById('screen').innerHTML='<div class="empty">กำลังโหลดข้อมูล…</div>';
   try{
     const s=await getDocs(collection(db,'registrations'));
-    rows=[]; s.forEach(d=>rows.push(d.data()));
+    rows=[]; s.forEach(d=>rows.push({...d.data(), _id:d.id}));
 
     const names=[...new Set(rows.map(r=>r.actName))].sort((a,b)=>a.localeCompare(b,'th'));
     const sel=document.getElementById('pick'), cur=sel.value;
