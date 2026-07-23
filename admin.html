@@ -206,12 +206,18 @@ function build(list){
     const arr=out.get(k);
     const teams=new Map(), solo=[];
     for(const r of arr){
-      if(r.team){ if(!teams.has(r.team)) teams.set(r.team,[]); teams.get(r.team).push(r); }
+      const key = r.teamId || r.team || '';
+      if(key){ if(!teams.has(key)) teams.set(key,[]); teams.get(key).push(r); }
       else solo.push(r);
     }
     /* team order by lowest-class member */
-    const tlist=[...teams.entries()].map(([n,m])=>({name:n,members:m.sort(cmp)}))
-      .sort((a,b)=>cmp(a.members[0],b.members[0]));
+    const tlist=[...teams.entries()].map(([k,m])=>{
+      const f=m[0];
+      const label = f.teamId
+        ? 'ทีม '+f.teamId+(f.team?` — ${f.team}`:'')
+        : 'ทีม '+k;
+      return {name:label, key:k, members:m.sort(cmp)};
+    }).sort((a,b)=> (a.key>b.key?1:a.key<b.key?-1:0) || cmp(a.members[0],b.members[0]));
     return {act,lvl,teams:tlist,solo:solo.sort(cmp),count:arr.length};
   });
 }
@@ -222,7 +228,7 @@ function screenView(groups){
   el.innerHTML=groups.map(g=>{
     let body='';
     for(const t of g.teams){
-      body+=`<tr class="tm"><td colspan="5">ทีม ${t.name} (${t.members.length} คน)</td></tr>`;
+      body+=`<tr class="tm"><td colspan="5">${t.name} (${t.members.length} คน)</td></tr>`;
       t.members.forEach((m,i)=>{ body+=row(m,i+1); });
     }
     g.solo.forEach((m,i)=>{ body+=row(m,i+1); });
@@ -243,7 +249,7 @@ function printView(groups){
   document.getElementById('print').innerHTML = groups.map(g=>{
     let body='',n=0;
     for(const t of g.teams){
-      body+=`<tr class="tm"><td colspan="7">ทีม ${t.name}</td></tr>`;
+      body+=`<tr class="tm"><td colspan="7">${t.name}</td></tr>`;
       t.members.forEach(m=>{ n++; body+=prow(m,n); });
     }
     g.solo.forEach(m=>{ n++; body+=prow(m,n); });
@@ -293,7 +299,7 @@ async function load(){
     if([...sel.options].some(o=>o.value===cur)) sel.value=cur;
 
     const people=new Set(rows.map(r=>r.name+'|'+r.class));
-    const teams =new Set(rows.filter(r=>r.team).map(r=>r.actName+'|'+r.team));
+    const teams =new Set(rows.filter(r=>r.teamId||r.team).map(r=>r.actName+'|'+r.level+'|'+(r.teamId||r.team)));
     document.getElementById('stats').innerHTML=`
       <div class="stat"><div class="n">${rows.length}</div><div class="l">รายการที่สมัคร</div></div>
       <div class="stat"><div class="n">${people.size}</div><div class="l">นักเรียน (ไม่ซ้ำ)</div></div>
