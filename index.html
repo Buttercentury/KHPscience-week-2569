@@ -292,7 +292,8 @@ for(const g of [1,2,3,4,5,6])
   for(let r=1;r<=ROOMS[g];r++) CLASSES.push(`ม.${g}/${r}`);
 const selC=document.getElementById('fclass');
 CLASSES.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;selC.appendChild(o);});
-const levelOf = cls => (+cls.split('.')[1].split('/')[0] <= 3) ? 'ม.ต้น' : 'ม.ปลาย';
+const gradeOf = cls => +cls.split('.')[1].split('/')[0];
+const levelOf = cls => gradeOf(cls) <= 3 ? 'ม.ต้น' : 'ม.ปลาย';
 
 /* ============ activities ============ */
 /* close: ISO local Thai time. open=false -> display only */
@@ -315,9 +316,9 @@ const ACTS=[
   note:'ประเภทเดี่ยว · พูด 3–5 นาที'},
 
  {id:'dance', name:'การแข่งขัน Cover Dance', open:true, split:true,
-  roster:{min:5, max:8, named:true},
+  roster:{min:5, max:8, named:true, sameGrade:true},
   close:'2026-08-19T12:00', comp:'21 ส.ค. 2569',
-  note:'5–8 คน/ทีม · รวมทีมในช่วงชั้นเดียวกันได้ · เพลง K-pop / T-pop หรืออื่น ๆ'},
+  note:'5–8 คน/ทีม · ทุกคนต้องอยู่ชั้นเดียวกัน (เช่น ม.1 ทั้งทีม) · เพลง K-pop / T-pop หรืออื่น ๆ'},
 
  {id:'recycle', name:'การแข่งขันประกวดชุดรีไซเคิล', open:true, split:true,
   costume:true, close:'2026-08-19T12:00', comp:'21 ส.ค. 2569',
@@ -469,8 +470,11 @@ function render(){
         });
         inner += `<button class="addm" data-add="${a.id}" ${list.length+1>=R.max?'disabled':''}>
             + เพิ่มสมาชิก</button>`;
-        inner += `<div class="warnline">สมาชิกทุกคนต้องอยู่<b>ช่วงชั้นเดียวกัน</b>
-          (ม.ต้นกับ ม.ต้น · ม.ปลายกับ ม.ปลาย) แต่ต่างห้องหรือต่างชั้นในช่วงเดียวกันได้</div>`;
+        inner += R.sameGrade
+          ? `<div class="warnline">สมาชิกทุกคนต้องอยู่<b>ชั้นเดียวกัน</b>
+              เช่น ม.1/2 กับ ม.1/5 รวมทีมได้ แต่ ม.1 กับ ม.2 รวมทีมไม่ได้</div>`
+          : `<div class="warnline">สมาชิกทุกคนต้องอยู่<b>ช่วงชั้นเดียวกัน</b>
+              เช่น ม.1 กับ ม.3 รวมทีมได้ (ม.ต้นเหมือนกัน) แต่ ม.3 กับ ม.5 รวมทีมไม่ได้</div>`;
       }
       if(a.costume){
         const cat=extra[a.id]?.category||'';
@@ -573,11 +577,18 @@ document.getElementById('send').onclick = async ()=>{
         if(!m.class)             return err(`กรุณาเลือกชั้นของสมาชิกคนที่ ${i+2} ของ "${a.name}"`);
         if(!(''+(m.no||'')).trim()) return err(`กรุณากรอกเลขที่ของสมาชิกคนที่ ${i+2} ของ "${a.name}"`);
       }
-      /* same level check */
-      const myLv=levelOf(cls);
-      const bad=ms.find(m=>levelOf(m.class)!==myLv);
-      if(bad) return err(`"${a.name}" สมาชิกทุกคนต้องอยู่ช่วงชั้นเดียวกัน<br>
-        ผู้กรอกอยู่ ${cls} (${myLv}) แต่ <b>${bad.name}</b> อยู่ ${bad.class} (${levelOf(bad.class)})`);
+      /* level / grade check */
+      if(R.sameGrade){
+        const myG=gradeOf(cls);
+        const bad=ms.find(m=>gradeOf(m.class)!==myG);
+        if(bad) return err(`"${a.name}" สมาชิกทุกคนต้องอยู่<b>ชั้นเดียวกัน</b> (เช่น ม.1 ทั้งทีม)<br>
+          ผู้กรอกอยู่ ${cls} แต่ <b>${bad.name}</b> อยู่ ${bad.class}`);
+      }else{
+        const myLv=levelOf(cls);
+        const bad=ms.find(m=>levelOf(m.class)!==myLv);
+        if(bad) return err(`"${a.name}" สมาชิกทุกคนต้องอยู่ช่วงชั้นเดียวกัน<br>
+          ผู้กรอกอยู่ ${cls} (${myLv}) แต่ <b>${bad.name}</b> อยู่ ${bad.class} (${levelOf(bad.class)})`);
+      }
       /* duplicate person in same team */
       const seen=[name+'|'+cls];
       for(const m of ms){
